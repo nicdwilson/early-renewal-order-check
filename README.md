@@ -1,10 +1,10 @@
 # Early Renewal Order Check
 
-A WordPress plugin that prevents automatic subscription renewals when there's an early renewal order on hold within the past 3 weeks. We recommend adding a notification to admin using AutomateWoo and the note added trigger. The note contains the text "Scheduled renewal payment aborted: Found early renewal order on hold."
+A WordPress plugin that prevents automatic subscription renewals and customer notifications when there's an early renewal order on hold within the past 3 weeks. We recommend adding a notification to admin using AutomateWoo and the note added trigger. The note contains the text "Scheduled renewal payment aborted: Found early renewal order on hold."
 
 ## Description
 
-The Early Renewal Order Check plugin adds a safety mechanism to WooCommerce Subscriptions that checks for existing early renewal orders before processing automatic renewals. When a scheduled subscription payment is triggered, this plugin runs at priority 0 (before other actions) to:
+The Early Renewal Order Check plugin adds a safety mechanism to WooCommerce Subscriptions that checks for existing early renewal orders before processing automatic renewals and sending customer notifications. When a scheduled subscription payment or customer notification is triggered, this plugin runs at priority 0 (before other actions) to:
 
 1. Check if there are any renewal orders for the subscription
 2. Verify if any renewal order meets the abort criteria:
@@ -15,7 +15,7 @@ The Early Renewal Order Check plugin adds a safety mechanism to WooCommerce Subs
 
 ## Problem Solved
 
-This plugin addresses the issue described in [WOOSUBS-175](https://linear.app/a8c/issue/WOOSUBS-175/when-a-manual-early-renewal-is-awaiting-confirmation-of-payment) where manual early renewals that are awaiting payment confirmation could conflict with automatic scheduled renewals, potentially causing duplicate charges or payment processing issues.
+This plugin addresses the issue described in [WOOSUBS-175](https://linear.app/a8c/issue/WOOSUBS-175/when-a-manual-early-renewal-is-awaiting-confirmation-of-payment) where manual early renewals that are awaiting payment confirmation could conflict with automatic scheduled renewals, potentially causing duplicate charges or payment processing issues. It also prevents unnecessary customer notifications when there's already an early renewal order pending.
 
 ## Requirements
 
@@ -33,7 +33,10 @@ This plugin addresses the issue described in [WOOSUBS-175](https://linear.app/a8
 ## How It Works
 
 ### Hook Priority
-The plugin hooks into `woocommerce_scheduled_subscription_payment` at priority 0, ensuring it runs before any other subscription payment processing.
+The plugin hooks into two actions at priority 0, ensuring it runs before any other subscription processing:
+
+1. `woocommerce_scheduled_subscription_payment` - for payment processing
+2. `woocommerce_scheduled_subscription_customer_notification_renewal` - for customer notifications
 
 ### Abort Criteria
 A renewal order must meet ALL of the following criteria to trigger an abort:
@@ -47,8 +50,11 @@ When criteria are met, the plugin:
 
 1. Sets an abort flag for the subscription
 2. Adds a note to the subscription explaining the abort
-3. Removes the WooCommerce Subscriptions `prepare_renewal` action (priority 1)
-4. Removes the `maybe_process_failed_renewal_for_repair` action (priority 0)
+3. For payment processing:
+   - Removes the WooCommerce Subscriptions `prepare_renewal` action (priority 1)
+   - Removes the `maybe_process_failed_renewal_for_repair` action (priority 0)
+4. For customer notifications:
+   - Removes the `send_customer_renewal_notification` action (priority 10)
 
 ## Code Structure
 
@@ -58,8 +64,10 @@ The plugin uses a singleton pattern with the following key methods:
 
 - `instance()`: Returns the singleton instance
 - `check_early_renewal_order()`: Main check method called on scheduled payments
+- `check_early_renewal_order_notification()`: Check method called on customer notifications
 - `meets_abort_criteria()`: Validates if an order meets abort criteria
 - `abort_prepare_renewal()`: Removes renewal processing actions
+- `abort_customer_notification()`: Removes customer notification actions
 - `abort_gateway_payment()`: Removes gateway payment actions
 
 ### Static Properties
@@ -78,9 +86,16 @@ The plugin works automatically once activated. No manual intervention is require
 
 ## Logging
 
-When an abort occurs, the plugin adds a note to the subscription with the following format:
+When an abort occurs, the plugin adds a note to the subscription with one of the following formats:
+
+**For payment processing:**
 ```
-Scheduled renewal payment aborted: Found early renewal order #[order_number] on hold (created within past 3 weeks).
+Scheduled renewal payment aborted: Found early renewal order on hold. Order #[order_number] created within past 3 weeks.
+```
+
+**For customer notifications:**
+```
+Scheduled renewal customer notification aborted: Found early renewal order on hold. Order #[order_number] created within past 3 weeks.
 ```
 
 ## Development

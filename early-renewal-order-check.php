@@ -27,10 +27,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Early Renewal Order Check Class
  *
- * This class adds a check at priority zero to the woocommerce_scheduled_subscription_payment
- * action to track whether there is an early renewal order for the subscription, and check
- * the status of that order. If the order is on hold and meets specific criteria, it aborts
- * the renewal process to prevent duplicate charges.
+ * This class adds a check at priority zero to both the woocommerce_scheduled_subscription_payment
+ * and woocommerce_scheduled_subscription_customer_notification_renewal actions to track whether 
+ * there is an early renewal order for the subscription, and check the status of that order. 
+ * If the order is on hold and meets specific criteria, it aborts the renewal process to 
+ * prevent duplicate charges and unnecessary customer notifications.
  *
  * The plugin checks for renewal orders that meet all three criteria:
  * 1. Order status is 'on-hold'
@@ -86,6 +87,7 @@ class Early_Renewal_Order_Check {
 	public function __construct() {
 		// Add the check at priority 0 (before any other actions)
 		add_action( 'woocommerce_scheduled_subscription_payment', array( $this, 'check_early_renewal_order' ), 0, 1 );
+		add_action( 'woocommerce_scheduled_subscription_customer_notification_renewal', array( $this, 'check_early_renewal_order_notification' ), 0, 1 );
 	}
 
 	/**
@@ -133,6 +135,57 @@ class Early_Renewal_Order_Check {
 				);
 
 				$this->abort_prepare_renewal( $subscription_id );
+
+				return;
+			}
+		}
+	}
+
+	/**
+	 * Check for early renewal orders and abort if on hold for customer notifications
+	 *
+	 * This method is called at priority 0 on the woocommerce_scheduled_subscription_customer_notification_renewal
+	 * action. It checks all renewal orders for the subscription and determines if any
+	 * meet the criteria for aborting the customer notification.
+	 *
+	 * @param int $subscription_id The subscription ID to check
+	 * @since 1.0.0
+	 */
+	public function check_early_renewal_order_notification( $subscription_id ) {
+		
+		$subscription = wcs_get_subscription( $subscription_id );
+
+		if ( ! $subscription ) {
+			return;
+		}
+
+		// Get all renewal orders for this subscription.
+		$renewal_orders = $subscription->get_related_orders( 'all', 'renewal' );
+
+		if ( empty( $renewal_orders ) ) {
+			return;
+		}
+
+		// Check if any renewal order meets all criteria.
+		foreach ( $renewal_orders as $renewal_order ) {
+			if ( ! is_object( $renewal_order ) ) {
+				continue;
+			}
+
+			// Check if this renewal order meets all three criteria.
+			if ( $this->meets_abort_criteria( $renewal_order ) ) {
+				// Set the abort flag for this subscription
+				self::$abort_renewal[ $subscription_id ] = $renewal_order->get_id();
+
+				// Log the abort action
+				$subscription->add_order_note(
+					sprintf(
+						__( 'Scheduled renewal customer notification aborted: Found early renewal order on hold. Order #%s created within past 3 weeks.', 'wcs-early-renewal-check' ),
+						$renewal_order->get_order_number()
+					)
+				);
+
+				$this->abort_customer_notification( $subscription_id );
 
 				return;
 			}
@@ -204,6 +257,28 @@ class Early_Renewal_Order_Check {
 				'WC_Subscriptions_Manager',
 				'maybe_process_failed_renewal_for_repair'
 			), 0 );
+		}
+	}
+
+	/**
+	 * Abort the customer notification process
+	 *
+	 * Removes the WooCommerce Subscriptions customer notification action
+	 * to prevent the customer notification from being sent.
+	 *
+	 * @param int $subscription_id The subscription ID
+	 * @since 1.0.0
+	 */
+	public function abort_customer_notification( $subscription_id ) {
+		if ( isset( self::$abort_renewal[ $subscription_id ] ) ) {
+			// Remove the customer notification action
+			remove_action( 'woocommerce_scheduled_subscription_customer_notification_renewal', array(
+				'WC_Subscriptions_Manager',
+				'send_customer_renewal_notification'
+			), 10 );
+
+			// Clear the abort flag
+			unset( self::$abort_renewal[ $subscription_id ] );
 		}
 	}
 

@@ -82,7 +82,7 @@ The plugin works automatically once activated. No manual intervention is require
 1. The plugin checks for early renewal orders
 2. If an early renewal order on hold is found within 3 weeks, the automatic renewal is aborted
 3. A note is added to the subscription explaining the abort
-4. The renewal process stops before any payment processing occurs
+4. The renewal process stops before any payment processing or customer notifications occur
 
 ## Logging
 
@@ -108,8 +108,8 @@ To test the plugin:
 3. Set the order status to 'on-hold'
 4. Add the `_subscription_renewal_early` meta field
 5. Ensure the order is less than 3 weeks old
-6. Trigger a scheduled renewal payment
-7. Verify the renewal is aborted and a note is added
+6. Trigger a scheduled renewal payment or customer notification
+7. Verify the renewal/notification is aborted and a note is added
 
 ### Customization
 The plugin can be extended by:
@@ -118,6 +118,7 @@ The plugin can be extended by:
 - Adding additional criteria checks
 - Customizing the abort message
 - Adding additional abort actions
+- Extending the abort functionality to other subscription-related hooks
 
 ## Changelog
 
@@ -125,6 +126,8 @@ The plugin can be extended by:
 - Initial release
 - Basic early renewal order checking functionality
 - Abort mechanism for conflicting renewals
+- Customer notification abort functionality
+- Comprehensive documentation and code comments
 
 ## Support
 
